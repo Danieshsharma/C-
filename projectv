@@ -1,0 +1,52 @@
+#include <iostream>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+// Define a structure for the shared memory data
+struct SharedData {
+    int data;
+    // Add other data types as needed
+};
+
+int main() {
+    key_t key = ftok("shared_memory_key", 65); // Generate a key for shared memory
+
+    // Create a shared memory segment
+    int shmid = shmget(key, sizeof(SharedData), 0666 | IPC_CREAT);
+    if (shmid == -1) {
+        perror("Shared memory creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Attach the shared memory segment
+    SharedData* sharedData = static_cast<SharedData*>(shmat(shmid, nullptr, 0));
+    if (reinterpret_cast<int>(sharedData) == -1) {
+        perror("Shared memory attachment failed");
+        exit(EXIT_FAILURE);
+    }
+
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("Fork failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) {
+        // Child process
+        std::cout << "Child Process Received: " << sharedData->data << std::endl;
+    } else {
+        // Parent process
+        sharedData->data = 42; // Set the shared data
+        std::cout << "Parent Process Sent: " << sharedData->data << std::endl;
+        wait(NULL); // Wait for the child process to finish
+    }
+
+    // Detach the shared memory segment
+    shmdt(sharedData);
+    // Remove the shared memory segment
+    shmctl(shmid, IPC_RMID, nullptr);
+
+    return 0;
+}
